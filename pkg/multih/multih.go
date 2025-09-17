@@ -41,7 +41,7 @@ func (m *MultiHandler) Handle(ctx context.Context, record slog.Record) error {
 }
 
 func (m *MultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	handlers := make([]slog.Handler, len(m.handlers))
+	handlers := make([]slog.Handler, 0, len(m.handlers))
 	for _, h := range m.handlers {
 		handlers = append(handlers, h.WithAttrs(attrs))
 	}
@@ -49,7 +49,7 @@ func (m *MultiHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 }
 
 func (m *MultiHandler) WithGroup(name string) slog.Handler {
-	handlers := make([]slog.Handler, len(m.handlers))
+	handlers := make([]slog.Handler, 0, len(m.handlers))
 	for _, h := range m.handlers {
 		handlers = append(handlers, h.WithGroup(name))
 	}
