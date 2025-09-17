@@ -4,8 +4,10 @@ go 1.24.6
 
 require (
 	github.com/hanwen/go-fuse/v2 v2.8.0
+	github.com/lmittmann/tint v1.1.2
 	github.com/tobischo/gokeepasslib/v3 v3.6.1
 	golang.org/x/term v0.35.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 )
 
 require (
