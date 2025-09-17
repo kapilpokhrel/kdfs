@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+	"os/signal"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/kapilpokhrel/kdfs/internal/kdfs"
@@ -55,6 +56,14 @@ func startKDFS(kdbxpath string, mountpoint string, password []byte) {
 	}
 	db.LockProtectedEntries()
 	password = nil
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigCh
+		server.Unmount()
+	}()
 	server.Wait()
 }
 
@@ -80,7 +89,7 @@ func main() {
 
 	// Flags
 	var daemon bool
-	flag.BoolVar(&daemon, "daemon", true, "Run as a background daemon")
+	flag.BoolVar(&daemon, "daemon", false, "Run as a background daemon")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(),
 			"Usage: %s [ options ] <mountpoint> <vault (kdbx file)>\n\n", os.Args[0])
