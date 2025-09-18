@@ -3,10 +3,10 @@ package kdfs
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"sync"
 	"syscall"
-	"log/slog"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -67,8 +67,8 @@ func (file *kdfsFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, ui
 
 func (file *kdfsFile) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
 	flogger := slog.Default().With("file", file.Path(nil))
-	
-	flogger.Debug("Read", "offset", off, "len", len(dest) )
+
+	flogger.Debug("Read", "offset", off, "len", len(dest))
 	end := min(int(off)+len(dest), len(file.data))
 	return fuse.ReadResultData(file.data[off:end]), 0
 }
@@ -85,7 +85,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 		parent.AddChild(title, ch, true)
 	}
 
-	files := []string{"Username", "Password", "Notes", "URL"}
+	files := []string{"UserName", "Password", "Notes", "URL"}
 	for _, f := range files {
 		content := e.GetContent(f)
 		if len(content) == 0 {
@@ -123,8 +123,4 @@ func (kdfs *kdfsRoot) OnAdd(ctx context.Context) {
 	for _, group := range kdfs.root.Groups {
 		addGroup(ctx, r, &group)
 	}
-}
-
-func NewKDFSRoot(root *gokeepasslib.RootData) fs.InodeEmbedder {
-	return &kdfsRoot{root: root}
 }

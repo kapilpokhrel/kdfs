@@ -8,64 +8,16 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"syscall"
-	"os/signal"
 
-	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/kapilpokhrel/kdfs/internal/kdfs"
 	"github.com/kapilpokhrel/kdfs/pkg/multih"
 	"github.com/lmittmann/tint"
-	"github.com/tobischo/gokeepasslib/v3"
 	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
-
-func OpenKDBX(kdbxFile string, password []byte) (db *gokeepasslib.Database, err error) {
-	file, err := os.Open(kdbxFile)
-	if err != nil {
-		return
-	}
-	db = gokeepasslib.NewDatabase()
-	db.Credentials = gokeepasslib.NewPasswordCredentials(string(password))
-	err = gokeepasslib.NewDecoder(file).Decode(db)
-	if err != nil {
-		return
-	}
-	return db, nil
-}
-
-func startKDFS(kdbxpath string, mountpoint string, password []byte) {
-	db, err := OpenKDBX(kdbxpath, password)
-	if err != nil {
-		slog.Error("Can't open kdbx file", "error", err)
-		os.Exit(1)
-	}
-
-	err = db.UnlockProtectedEntries()
-	if err != nil {
-		slog.Error("Incorrect credential", "error", err)
-		os.Exit(1)
-	}
-
-	kdbsRoot := kdfs.NewKDFSRoot(db.Content.Root)
-	server, err := fs.Mount(mountpoint, kdbsRoot, &fs.Options{})
-	if err != nil {
-		slog.Error("Couldn't mount the fs on the given mount point", "mountpoint", flag.Arg(0), "error", err)
-		os.Exit(1)
-	}
-	db.LockProtectedEntries()
-	password = nil
-
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
-
-	go func() {
-		<-sigCh
-		server.Unmount()
-	}()
-	server.Wait()
-}
 
 func setupLogger() {
 	stdHandler := tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelWarn})
@@ -102,10 +54,14 @@ func main() {
 		os.Exit(2)
 	}
 
+	var pass []byte
+
 	// Demoanized execution
 	if os.Getenv("DAEMON") != "1" {
-		fmt.Fprint(os.Stderr, "Enter Password: ")
-		pass, err := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(os.Stderr, "Enter Password: ")
+
+		var err error
+		pass, err = term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
 			slog.Error("Couldn't read password from user", "error", err)
 			os.Exit(1)
@@ -131,9 +87,26 @@ func main() {
 				slog.Warn("Couldn't open pipe for FS daemon", "error", err)
 			}
 		}
-		startKDFS(flag.Arg(1), flag.Arg(0), pass)
-		os.Exit(0)
+	} else {
+		pass, _ = io.ReadAll(os.Stdin)
 	}
-	pass, _ := io.ReadAll(os.Stdin)
-	startKDFS(flag.Arg(1), flag.Arg(0), pass)
+
+	server, err := kdfs.NewKDFSServer(flag.Arg(1), pass, flag.Arg(0))
+	if err != nil {
+		slog.Error("Failed to create a kdfs server", "error", err)
+		os.Exit(1)
+	}
+	pass = nil
+	server.DB.Lock()
+
+	fmt.Printf("Mounted KDFS at %s\n", flag.Arg(0))
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigCh
+		server.Umount()
+	}()
+	server.Wait()
 }
