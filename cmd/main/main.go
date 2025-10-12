@@ -13,7 +13,7 @@ import (
 	"syscall"
 
 	"github.com/kapilpokhrel/kdfs/internal/kdfs"
-	"github.com/kapilpokhrel/kdfs/pkg/multih"
+	"github.com/kapilpokhrel/kdfs/pkg/slog/handlermux"
 	"github.com/lmittmann/tint"
 	"golang.org/x/term"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -31,7 +31,7 @@ func setupLogger() {
 	}
 	rotFileHandler := slog.NewTextHandler(rotFileWriter, &slog.HandlerOptions{Level: slog.LevelInfo})
 
-	multiH := multih.NewMultiHandler(stdHandler, rotFileHandler)
+	multiH := handlermux.New(stdHandler, rotFileHandler)
 	logger := slog.New(multiH)
 	slog.SetDefault(logger)
 }
