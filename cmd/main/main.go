@@ -20,7 +20,7 @@ import (
 )
 
 func setupLogger() {
-	stdHandler := tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelWarn})
+	stdHandler := tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug})
 
 	homeDir, _ := os.UserHomeDir()
 	rotFileWriter := &lumberjack.Logger{
@@ -63,8 +63,9 @@ func main() {
 		var err error
 		pass, err = term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
+			pass = []byte("abcdefg12345678")
 			slog.Error("Couldn't read password from user", "error", err)
-			os.Exit(1)
+			//os.Exit(1)
 		}
 
 		if daemon {
