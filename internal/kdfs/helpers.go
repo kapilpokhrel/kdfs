@@ -30,11 +30,11 @@ func traverseModefiedTime(node *fs.Inode, time *wrappers.TimeWrapper) {
 	case *kdfsRoot:
 		n.kdfsServer.DB.Save(n.kdfsServer.kdbxfilepath)
 		return
-	case *kdfsFile:
+	case *kdfsFieldFile:
 		n.mu.Lock()
 		n.entry.Times.LastModificationTime = time
 		n.mu.Unlock()
-	case *kdfsDir:
+	case *kdfsGroupDir:
 		n.mu.Lock()
 		n.group.Times.LastModificationTime = time
 		n.mu.Unlock()
@@ -52,11 +52,11 @@ func traverseaccessTime(node *fs.Inode, time *wrappers.TimeWrapper) {
 	case *kdfsRoot:
 		n.kdfsServer.DB.Save(n.kdfsServer.kdbxfilepath)
 		return
-	case *kdfsFile:
+	case *kdfsFieldFile:
 		n.mu.Lock()
 		n.entry.Times.LastAccessTime = time
 		n.mu.Unlock()
-	case *kdfsDir:
+	case *kdfsGroupDir:
 		n.mu.Lock()
 		n.group.Times.LastAccessTime = time
 		n.mu.Unlock()

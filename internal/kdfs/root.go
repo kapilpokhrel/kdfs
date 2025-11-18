@@ -3,7 +3,9 @@ package kdfs
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -12,11 +14,13 @@ import (
 )
 
 type kdfsRoot struct {
-	kdfsDir
+	kdfsGroupDir
 
 	kdfsServer *KDFSServer
 	root       *gokeepasslib.RootData
 }
+
+/* kdfsEntryDir kdfsFieldFile (and kdfsEntryFile if created) need to share the mutex */
 
 /*
 addEntry and addGroup needs to get the address of group and entry using index
@@ -30,10 +34,11 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 		slog.Debug("Skipping entry because it has no title", "url", e.GetContent("URL"), "user", e.GetContent("Username"))
 		return
 	}
-	ch := parent.GetChild(title)
+	filename := fmt.Sprintf("Entry_%s", title)
+	ch := parent.GetChild(filename)
 	if ch == nil {
-		ch = parent.NewPersistentInode(ctx, &kdfsDir{group: parent.Operations().(*kdfsDir).group}, fs.StableAttr{Mode: fuse.S_IFDIR})
-		parent.AddChild(title, ch, true)
+		ch = parent.NewPersistentInode(ctx, &kdfsEntryDir{entry: e}, fs.StableAttr{Mode: fuse.S_IFDIR})
+		parent.AddChild(filename, ch, true)
 	}
 
 	for _, valueData := range e.Values {
@@ -48,7 +53,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 
 		dataFile := memfile.New(len(content))
 		dataFile.WriteAt([]byte(content), 0)
-		fnode := &kdfsFile{entry: e, data: dataFile}
+		fnode := &kdfsFieldFile{entry: e, data: dataFile, mu: &ch.Operations().(*kdfsEntryDir).mu}
 		ch.AddChild(
 			fname,
 			ch.NewPersistentInode(ctx, fnode, fs.StableAttr{}),
@@ -60,7 +65,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 func addGroup(ctx context.Context, parent *fs.Inode, g *gokeepasslib.Group) {
 	ch := parent.GetChild(g.Name)
 	if ch == nil {
-		ch = parent.NewPersistentInode(ctx, &kdfsDir{group: g}, fs.StableAttr{Mode: fuse.S_IFDIR})
+		ch = parent.NewPersistentInode(ctx, &kdfsGroupDir{group: g}, fs.StableAttr{Mode: syscall.S_IFDIR | syscall.S_IREAD | syscall.S_IWRITE})
 		parent.AddChild(g.Name, ch, true)
 	}
 	for i := range g.Groups {
