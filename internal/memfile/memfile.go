@@ -50,3 +50,22 @@ func (f *MemFile) WriteAt(p []byte, off int64) (int, syscall.Errno) {
 	n := copy(f.buf[off:], p)
 	return n, 0
 }
+
+func (f *MemFile) SetSize(n int64) syscall.Errno {
+	if n < 0 {
+		return syscall.EINVAL
+	}
+
+	cur := int64(len(f.buf))
+
+	switch {
+	case n < cur:
+		f.buf = f.buf[:n]
+
+	case n > cur:
+		needed := n - cur
+		f.buf = append(f.buf, make([]byte, needed)...)
+	}
+
+	return 0
+}

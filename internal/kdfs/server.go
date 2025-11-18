@@ -32,7 +32,9 @@ func NewKDFSServer(kdbxfile string, password []byte, mountpoint string) (*KDFSSe
 		return nil, errors.Join(errors.New("mount failed"), err)
 	}
 
-	return &KDFSServer{kdbxfilepath: kdbxfile, DB: db, Server: server, Mount: mountpoint}, nil
+	kdfsServer := &KDFSServer{kdbxfilepath: kdbxfile, DB: db, Server: server, Mount: mountpoint}
+	kdbsRoot.kdfsServer = kdfsServer
+	return kdfsServer, nil
 }
 
 func (s *KDFSServer) Umount() {

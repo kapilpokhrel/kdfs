@@ -4,7 +4,6 @@ package kdfs
 import (
 	"context"
 	"log/slog"
-	"strings"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
@@ -15,8 +14,15 @@ import (
 type kdfsRoot struct {
 	kdfsDir
 
-	root *gokeepasslib.RootData
+	kdfsServer *KDFSServer
+	root       *gokeepasslib.RootData
 }
+
+/*
+addEntry and addGroup needs to get the address of group and entry using index
+(not ranging over Entries and Groups) to keep reference to the same variable in the
+original DB
+*/
 
 func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 	title := e.GetTitle()
@@ -30,9 +36,12 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 		parent.AddChild(title, ch, true)
 	}
 
-	files := []string{"UserName", "Password", "Notes", "URL"}
-	for _, f := range files {
-		content := e.GetContent(f)
+	for _, valueData := range e.Values {
+		fname, ok := kpToFS[valueData.Key]
+		if !ok {
+			continue
+		}
+		content := valueData.Value.Content
 		if len(content) == 0 {
 			continue
 		}
@@ -41,11 +50,10 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 		dataFile.WriteAt([]byte(content), 0)
 		fnode := &kdfsFile{entry: e, data: dataFile}
 		ch.AddChild(
-			strings.ToLower(f),
+			fname,
 			ch.NewPersistentInode(ctx, fnode, fs.StableAttr{}),
 			true,
 		)
-
 	}
 }
 
@@ -55,11 +63,11 @@ func addGroup(ctx context.Context, parent *fs.Inode, g *gokeepasslib.Group) {
 		ch = parent.NewPersistentInode(ctx, &kdfsDir{group: g}, fs.StableAttr{Mode: fuse.S_IFDIR})
 		parent.AddChild(g.Name, ch, true)
 	}
-	for _, group := range g.Groups {
-		addGroup(ctx, ch, &group)
+	for i := range g.Groups {
+		addGroup(ctx, ch, &g.Groups[i])
 	}
-	for _, entry := range g.Entries {
-		addEntry(ctx, ch, &entry)
+	for i := range g.Entries {
+		addEntry(ctx, ch, &g.Entries[i])
 	}
 }
 
@@ -68,7 +76,7 @@ var _ = (fs.NodeOnAdder)((*kdfsRoot)(nil))
 func (kdfs *kdfsRoot) OnAdd(ctx context.Context) {
 	r := &kdfs.Inode
 
-	for _, group := range kdfs.root.Groups {
-		addGroup(ctx, r, &group)
+	for i := range kdfs.root.Groups {
+		addGroup(ctx, r, &kdfs.root.Groups[i])
 	}
 }
