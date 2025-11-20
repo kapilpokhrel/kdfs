@@ -98,7 +98,6 @@ func main() {
 		os.Exit(1)
 	}
 	pass = nil
-	server.DB.Lock()
 
 	fmt.Printf("Mounted KDFS at %s\n", flag.Arg(0))
 

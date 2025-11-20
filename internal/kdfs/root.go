@@ -34,7 +34,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 		slog.Debug("Skipping entry because it has no title", "url", e.GetContent("URL"), "user", e.GetContent("Username"))
 		return
 	}
-	filename := fmt.Sprintf("Entry_%s", title)
+	filename := fmt.Sprintf("%s.entry", title)
 	ch := parent.GetChild(filename)
 	if ch == nil {
 		ch = parent.NewPersistentInode(ctx, &kdfsEntryDir{entry: e}, fs.StableAttr{Mode: fuse.S_IFDIR})
@@ -47,9 +47,6 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 			continue
 		}
 		content := valueData.Value.Content
-		if len(content) == 0 {
-			continue
-		}
 
 		dataFile := memfile.New(len(content))
 		dataFile.WriteAt([]byte(content), 0)

@@ -41,6 +41,9 @@ func (d *Database) Lock() {
 }
 
 func (d *Database) Save(savepath string) error {
+	d.Lock()
+	defer d.Unlock()
+
 	file, err := os.Create(savepath)
 	if err != nil {
 		return err

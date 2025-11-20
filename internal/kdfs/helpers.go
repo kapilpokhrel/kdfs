@@ -1,6 +1,8 @@
 package kdfs
 
 import (
+	"log/slog"
+
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
 )
@@ -22,13 +24,17 @@ var kpToFS = map[string]string{
 
 var fsToKP = ReverseMap(kpToFS)
 
-func traverseModefiedTime(node *fs.Inode, time *wrappers.TimeWrapper) {
+func traverseModifiedTime(node *fs.Inode, time *wrappers.TimeWrapper) {
 	if node == nil {
 		return
 	}
 	switch n := node.Operations().(type) {
 	case *kdfsRoot:
-		n.kdfsServer.DB.Save(n.kdfsServer.kdbxfilepath)
+		logger := slog.Default()
+		err := n.kdfsServer.DB.Save(n.kdfsServer.kdbxfilepath)
+		if err != nil {
+			logger.Error("Save failed", "error", err)
+		}
 		return
 	case *kdfsFieldFile:
 		n.mu.Lock()
@@ -38,19 +44,27 @@ func traverseModefiedTime(node *fs.Inode, time *wrappers.TimeWrapper) {
 		n.mu.Lock()
 		n.group.Times.LastModificationTime = time
 		n.mu.Unlock()
+	case *kdfsEntryDir:
+		n.mu.Lock()
+		n.entry.Times.LastModificationTime = time
+		n.mu.Unlock()
 	}
 	_, parent := node.Parent()
-	traverseModefiedTime(parent, time)
+	traverseModifiedTime(parent, time)
 }
 
-func traverseaccessTime(node *fs.Inode, time *wrappers.TimeWrapper) {
+func traverseAccessTime(node *fs.Inode, time *wrappers.TimeWrapper) {
 	if node == nil {
 		return
 	}
 
 	switch n := node.Operations().(type) {
 	case *kdfsRoot:
-		n.kdfsServer.DB.Save(n.kdfsServer.kdbxfilepath)
+		logger := slog.Default()
+		err := n.kdfsServer.DB.Save(n.kdfsServer.kdbxfilepath)
+		if err != nil {
+			logger.Error("Save failed", "error", err)
+		}
 		return
 	case *kdfsFieldFile:
 		n.mu.Lock()
@@ -62,5 +76,5 @@ func traverseaccessTime(node *fs.Inode, time *wrappers.TimeWrapper) {
 		n.mu.Unlock()
 	}
 	_, parent := node.Parent()
-	traverseaccessTime(parent, time)
+	traverseAccessTime(parent, time)
 }

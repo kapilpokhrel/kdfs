@@ -53,76 +53,78 @@ func (file *kdfsFieldFile) Getattr(ctx context.Context, f fs.FileHandle, out *fu
 	return 0
 }
 
-func (dir *kdfsFieldFile) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
-	flogger := slog.Default().With("file", dir.Path(nil))
+func (file *kdfsFieldFile) Setattr(ctx context.Context, f fs.FileHandle, in *fuse.SetAttrIn, out *fuse.AttrOut) syscall.Errno {
+	flogger := slog.Default().With("file", file.Path(nil))
 
 	out.Mode = in.Mode
 	out.Nlink = 1
 
 	modifiedTime := wrappers.Now()
 	out.Mtime = uint64(modifiedTime.Time.Unix())
-	dir.mu.RLock()
-	out.Atime = uint64(dir.entry.Times.LastAccessTime.Time.Unix())
-	out.Ctime = uint64(dir.entry.Times.CreationTime.Time.Unix())
-	dir.mu.RUnlock()
+	file.mu.RLock()
+	out.Atime = uint64(file.entry.Times.LastAccessTime.Time.Unix())
+	out.Ctime = uint64(file.entry.Times.CreationTime.Time.Unix())
+	file.mu.RUnlock()
 	out.Size = in.Size
 
-	dir.mu.Lock()
-	dir.data.SetSize(int64(in.Size))
-	dir.mu.Unlock()
+	file.mu.Lock()
+	file.data.SetSize(int64(in.Size))
+	file.mu.Unlock()
 
 	const bs = 512
 	out.Blksize = bs
 	out.Blocks = (out.Size + bs - 1) / bs
 	flogger.Debug("SetAttr", slog.Group("InAttr", "Mode", in.Mode, "Size", out.Size), slog.Group("OutAttr", "Mode", out.Mode, "Size", out.Size))
 
-	traverseModefiedTime(&dir.Inode, &modifiedTime)
+	traverseModifiedTime(&file.Inode, &modifiedTime)
 	return 0
 }
 
-func (dir *kdfsFieldFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
-	flogger := slog.Default().With("file", dir.Path(nil))
+func (file *kdfsFieldFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
+	flogger := slog.Default().With("file", file.Path(nil))
 
 	// Update lastaccessTime, OR SHOUD WE DO IT ON CLOSE? RELEASE?
-	rflags := uint32(fuse.FOPEN_CACHE_DIR | fuse.O_ANYWRITE)
+	rflags := uint32(fuse.FOPEN_KEEP_CACHE | fuse.O_ANYWRITE | fuse.FOPEN_DIRECT_IO | fuse.FOPEN_NOFLUSH)
 	flogger.Debug("Open", "inflags", flags, "outflags", rflags)
-	return fs.FileHandle(dir), rflags, 0
+	return fs.FileHandle(file), rflags, 0
 }
 
-func (dir *kdfsFieldFile) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
-	flogger := slog.Default().With("file", dir.Path(nil))
+func (file *kdfsFieldFile) Read(ctx context.Context, f fs.FileHandle, dest []byte, off int64) (fuse.ReadResult, syscall.Errno) {
+	flogger := slog.Default().With("file", file.Path(nil))
 
 	flogger.Debug("Read", "offset", off, "len", len(dest))
 
-	dir.mu.RLock()
-	n, err := dir.data.ReadAt(dest, off)
-	dir.mu.RUnlock()
+	file.mu.RLock()
+	n, err := file.data.ReadAt(dest, off)
+	file.mu.RUnlock()
 	if err != 0 {
 		return nil, err
 	}
 
-	accessTime := wrappers.Now()
-	traverseaccessTime(&dir.Inode, &accessTime)
+	if n != 0 {
+		accessTime := wrappers.Now()
+		traverseAccessTime(&file.Inode, &accessTime)
+	}
 
 	return fuse.ReadResultData(dest[:n]), 0
 }
 
-func (dir *kdfsFieldFile) Write(ctx context.Context, f fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
-	flogger := slog.Default().With("file", dir.Path(nil))
+func (file *kdfsFieldFile) Write(ctx context.Context, f fs.FileHandle, data []byte, off int64) (uint32, syscall.Errno) {
+	flogger := slog.Default().With("file", file.Path(nil))
 
 	flogger.Debug("Write", "offset", off, "len", len(data))
-	n, err := dir.data.WriteAt(data, off)
+	n, err := file.data.WriteAt(data, off)
 
-	fname := filepath.Base(dir.Path(nil))
+	fname := filepath.Base(file.Path(nil))
 	keepassKey := fsToKP[fname]
 
-	for i := range dir.entry.Values {
-		if keepassKey == dir.entry.Values[i].Key {
-			dir.mu.Lock()
-			dir.entry.Values[i].Value.Content = string(dir.data.Bytes())
-			dir.mu.Unlock()
+	for i := range file.entry.Values {
+		if keepassKey == file.entry.Values[i].Key {
+			file.mu.Lock()
+			file.entry.Values[i].Value.Content = string(file.data.Bytes())
+			file.mu.Unlock()
 			modifiedTime := wrappers.Now()
-			traverseModefiedTime(&dir.Inode, &modifiedTime)
+			traverseModifiedTime(&file.Inode, &modifiedTime)
 			break
 		}
 	}
