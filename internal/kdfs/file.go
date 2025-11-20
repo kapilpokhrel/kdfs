@@ -3,6 +3,7 @@ package kdfs
 import (
 	"context"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sync"
 	"syscall"
@@ -37,6 +38,8 @@ func (file *kdfsFieldFile) Getattr(ctx context.Context, f fs.FileHandle, out *fu
 	logger := slog.Default().With("file", path)
 
 	out.Mode = uint32(0o0640)
+	out.Uid = uint32(os.Getuid())
+	out.Gid = uint32(os.Getgid())
 	out.Nlink = 1
 
 	entry, err := file.kdfsServer.DB.GetEntry(nil, cleanEntryPath(path))
@@ -67,42 +70,56 @@ func (file *kdfsFieldFile) Setattr(ctx context.Context, f fs.FileHandle, in *fus
 		logger.Error("Erorr in getting a entry")
 		return syscall.EIO
 	}
+
+	changed := false
 	defer func() {
+		if !changed {
+			return
+		}
 		if err = file.kdfsServer.DB.SetEntry(nil, cleanEntryPath(path), entry); err != nil {
 			logger.Error("Error in saving a entry")
 		}
 	}()
 
-	modifiedTime := wrappers.Now()
+	out.Mode = uint32(0o0640)
+	out.Uid = uint32(os.Getuid())
+	out.Gid = uint32(os.Getgid())
 
-	out.Mode = in.Mode
 	out.Nlink = 1
-	out.Mtime = uint64(modifiedTime.Time.Unix())
+	if in.Valid&fuse.FATTR_MTIME != 0 {
+		modifiedTime := wrappers.Now()
+		out.Mtime = uint64(modifiedTime.Time.Unix())
+		entry.Times.LastModificationTime = &modifiedTime
+
+		changed = true
+	}
 	out.Atime = uint64(entry.Times.LastAccessTime.Time.Unix())
 	out.Ctime = uint64(entry.Times.CreationTime.Time.Unix())
-	out.Mtime = uint64(entry.Times.LastModificationTime.Time.Unix())
-	out.Size = in.Size
+
+	if in.Valid&fuse.FATTR_SIZE != 0 {
+		file.mu.Lock()
+		file.data.SetSize(int64(in.Size))
+		file.mu.Unlock()
+
+		out.Size = in.Size
+		fname := filepath.Base(file.Path(nil))
+		keepassKey := fsToKP[fname]
+		for i := range entry.Values {
+			if keepassKey == entry.Values[i].Key {
+				file.mu.RLock()
+				entry.Values[i].Value.Content = string(file.data.Bytes())
+				file.mu.RUnlock()
+				break
+			}
+		}
+
+		changed = true
+	}
 	const bs = 512
 	out.Blksize = bs
 	out.Blocks = (out.Size + bs - 1) / bs
-
-	file.mu.Lock()
-	file.data.SetSize(int64(in.Size))
-	file.mu.Unlock()
-
-	fname := filepath.Base(file.Path(nil))
-	keepassKey := fsToKP[fname]
-	entry.Times.LastModificationTime = &modifiedTime
-	for i := range entry.Values {
-		if keepassKey == entry.Values[i].Key {
-			file.mu.RLock()
-			entry.Values[i].Value.Content = string(file.data.Bytes())
-			file.mu.RUnlock()
-			break
-		}
-	}
-
 	logger.Debug("SetAttr", slog.Group("InAttr", "Mode", in.Mode, "Size", out.Size), slog.Group("OutAttr", "Mode", out.Mode, "Size", out.Size))
+
 	return 0
 }
 

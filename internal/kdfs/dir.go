@@ -3,6 +3,7 @@ package kdfs
 import (
 	"context"
 	"log/slog"
+	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -160,6 +161,8 @@ func (dir *kdfsEntryDir) Create(ctx context.Context, name string, flags uint32, 
 	logger.Debug("Create", "name", name)
 
 	out.Mode = uint32(0o0640)
+	out.Uid = uint32(os.Getuid())
+	out.Gid = uint32(os.Getgid())
 	out.Nlink = 1
 	out.Mtime = uint64(entry.Times.LastModificationTime.Time.Unix())
 	out.Atime = uint64(entry.Times.LastAccessTime.Time.Unix())
