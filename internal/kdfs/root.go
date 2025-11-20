@@ -16,19 +16,10 @@ import (
 type kdfsRoot struct {
 	kdfsGroupDir
 
-	kdfsServer *KDFSServer
-	root       *gokeepasslib.RootData
+	root *gokeepasslib.RootData
 }
 
-/* kdfsEntryDir kdfsFieldFile (and kdfsEntryFile if created) need to share the mutex */
-
-/*
-addEntry and addGroup needs to get the address of group and entry using index
-(not ranging over Entries and Groups) to keep reference to the same variable in the
-original DB
-*/
-
-func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
+func addEntry(ctx context.Context, parent *fs.Inode, e gokeepasslib.Entry, server *KDFSServer) {
 	title := e.GetTitle()
 	if len(title) == 0 {
 		slog.Debug("Skipping entry because it has no title", "url", e.GetContent("URL"), "user", e.GetContent("Username"))
@@ -37,8 +28,9 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 	filename := fmt.Sprintf("%s.entry", title)
 	ch := parent.GetChild(filename)
 	if ch == nil {
-		ch = parent.NewPersistentInode(ctx, &kdfsEntryDir{entry: e}, fs.StableAttr{Mode: fuse.S_IFDIR})
+		ch = parent.NewPersistentInode(ctx, &kdfsEntryDir{kdfsServer: server}, fs.StableAttr{Mode: fuse.S_IFDIR})
 		parent.AddChild(filename, ch, true)
+		slog.Debug("Added a entry directory", "title", title, "path", parent.Path(nil))
 	}
 
 	for _, valueData := range e.Values {
@@ -50,7 +42,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 
 		dataFile := memfile.New(len(content))
 		dataFile.WriteAt([]byte(content), 0)
-		fnode := &kdfsFieldFile{entry: e, data: dataFile, mu: &ch.Operations().(*kdfsEntryDir).mu}
+		fnode := &kdfsFieldFile{data: dataFile, kdfsServer: server}
 		ch.AddChild(
 			fname,
 			ch.NewPersistentInode(ctx, fnode, fs.StableAttr{}),
@@ -59,17 +51,18 @@ func addEntry(ctx context.Context, parent *fs.Inode, e *gokeepasslib.Entry) {
 	}
 }
 
-func addGroup(ctx context.Context, parent *fs.Inode, g *gokeepasslib.Group) {
+func addGroup(ctx context.Context, parent *fs.Inode, g gokeepasslib.Group, server *KDFSServer) {
 	ch := parent.GetChild(g.Name)
 	if ch == nil {
-		ch = parent.NewPersistentInode(ctx, &kdfsGroupDir{group: g}, fs.StableAttr{Mode: syscall.S_IFDIR | syscall.S_IREAD | syscall.S_IWRITE})
+		ch = parent.NewPersistentInode(ctx, &kdfsGroupDir{kdfsServer: server}, fs.StableAttr{Mode: syscall.S_IFDIR | syscall.S_IREAD | syscall.S_IWRITE})
 		parent.AddChild(g.Name, ch, true)
+		slog.Debug("Added a group directory", "name", g.Name, "path", parent.Path(nil))
 	}
 	for i := range g.Groups {
-		addGroup(ctx, ch, &g.Groups[i])
+		addGroup(ctx, ch, g.Groups[i], server)
 	}
 	for i := range g.Entries {
-		addEntry(ctx, ch, &g.Entries[i])
+		addEntry(ctx, ch, g.Entries[i], server)
 	}
 }
 
@@ -79,6 +72,6 @@ func (kdfs *kdfsRoot) OnAdd(ctx context.Context) {
 	r := &kdfs.Inode
 
 	for i := range kdfs.root.Groups {
-		addGroup(ctx, r, &kdfs.root.Groups[i])
+		addGroup(ctx, r, kdfs.root.Groups[i], kdfs.kdfsServer)
 	}
 }
