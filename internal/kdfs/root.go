@@ -5,10 +5,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
-	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/tobischo/gokeepasslib/v3"
 )
 
@@ -25,34 +23,20 @@ func addEntry(ctx context.Context, parent *fs.Inode, e gokeepasslib.Entry, serve
 		return
 	}
 	filename := fmt.Sprintf("%s.entry", title)
-	ch := parent.GetChild(filename)
-	if ch == nil {
-		ch = parent.NewPersistentInode(ctx, &kdfsEntryDir{kdfsServer: server}, fs.StableAttr{Mode: fuse.S_IFDIR})
-		parent.AddChild(filename, ch, true)
-		slog.Debug("Added a entry directory", "title", title, "path", parent.Path(nil))
-	}
+
+	_, ch := NewEntryDir(ctx, filename, parent, server)
 
 	for _, valueData := range e.Values {
 		fname, ok := kpToFS[valueData.Key]
 		if !ok {
 			continue
 		}
-		fnode := &kdfsFieldFile{kdfsServer: server}
-		ch.AddChild(
-			fname,
-			ch.NewPersistentInode(ctx, fnode, fs.StableAttr{}),
-			true,
-		)
+		NewFieldFile(ctx, fname, ch, server)
 	}
 }
 
 func addGroup(ctx context.Context, parent *fs.Inode, g gokeepasslib.Group, server *KDFSServer) {
-	ch := parent.GetChild(g.Name)
-	if ch == nil {
-		ch = parent.NewPersistentInode(ctx, &kdfsGroupDir{kdfsServer: server}, fs.StableAttr{Mode: syscall.S_IFDIR | syscall.S_IREAD | syscall.S_IWRITE})
-		parent.AddChild(g.Name, ch, true)
-		slog.Debug("Added a group directory", "name", g.Name, "path", parent.Path(nil))
-	}
+	_, ch := NewGroupDir(ctx, g.Name, parent, server)
 	for i := range g.Groups {
 		addGroup(ctx, ch, g.Groups[i], server)
 	}
