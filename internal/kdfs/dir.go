@@ -10,7 +10,6 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/kapilpokhrel/kdfs/internal/memfile"
 	"github.com/tobischo/gokeepasslib/v3"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
 )
@@ -156,7 +155,7 @@ func (dir *kdfsEntryDir) Create(ctx context.Context, name string, flags uint32, 
 	currTime := wrappers.Now()
 	entry.Times.LastModificationTime = &currTime
 
-	fnode := &kdfsFieldFile{data: memfile.New(0), kdfsServer: dir.kdfsServer}
+	fnode := &kdfsFieldFile{kdfsServer: dir.kdfsServer}
 
 	logger.Debug("Create", "name", name)
 

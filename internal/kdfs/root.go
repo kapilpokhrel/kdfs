@@ -9,7 +9,6 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/kapilpokhrel/kdfs/internal/memfile"
 	"github.com/tobischo/gokeepasslib/v3"
 )
 
@@ -38,11 +37,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e gokeepasslib.Entry, serve
 		if !ok {
 			continue
 		}
-		content := valueData.Value.Content
-
-		dataFile := memfile.New(len(content))
-		dataFile.WriteAt([]byte(content), 0)
-		fnode := &kdfsFieldFile{data: dataFile, kdfsServer: server}
+		fnode := &kdfsFieldFile{kdfsServer: server}
 		ch.AddChild(
 			fname,
 			ch.NewPersistentInode(ctx, fnode, fs.StableAttr{}),

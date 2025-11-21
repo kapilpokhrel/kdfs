@@ -10,7 +10,6 @@ import (
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
-	"github.com/kapilpokhrel/kdfs/internal/memfile"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
 )
 
@@ -19,7 +18,6 @@ import (
 type kdfsFieldFile struct {
 	fs.Inode
 
-	data       *memfile.MemFile
 	mu         sync.RWMutex
 	kdfsServer *KDFSServer
 }
@@ -47,12 +45,14 @@ func (file *kdfsFieldFile) Getattr(ctx context.Context, f fs.FileHandle, out *fu
 		logger.Error("Erorr in getting a entry")
 		return syscall.EIO
 	}
+	fname := filepath.Base(file.Path(nil))
+	keepassKey := fsToKP[fname]
+	content := entry.GetContent(keepassKey)
+
 	out.Mtime = uint64(entry.Times.LastModificationTime.Time.Unix())
 	out.Atime = uint64(entry.Times.LastAccessTime.Time.Unix())
 	out.Ctime = uint64(entry.Times.CreationTime.Time.Unix())
-	file.mu.RLock()
-	out.Size = uint64(file.data.Len())
-	file.mu.RUnlock()
+	out.Size = uint64(len(content))
 	const bs = 512
 	out.Blksize = bs
 	out.Blocks = (out.Size + bs - 1) / bs
@@ -97,17 +97,17 @@ func (file *kdfsFieldFile) Setattr(ctx context.Context, f fs.FileHandle, in *fus
 	out.Ctime = uint64(entry.Times.CreationTime.Time.Unix())
 
 	if in.Valid&fuse.FATTR_SIZE != 0 {
-		file.mu.Lock()
-		file.data.SetSize(int64(in.Size))
-		file.mu.Unlock()
-
 		out.Size = in.Size
 		fname := filepath.Base(file.Path(nil))
 		keepassKey := fsToKP[fname]
+		newContent, err := setSize([]byte(entry.GetContent(keepassKey)), int64(in.Size))
+		if err != 0 {
+			return err
+		}
 		for i := range entry.Values {
 			if keepassKey == entry.Values[i].Key {
 				file.mu.RLock()
-				entry.Values[i].Value.Content = string(file.data.Bytes())
+				entry.Values[i].Value.Content = string(newContent)
 				file.mu.RUnlock()
 				break
 			}
@@ -137,18 +137,20 @@ func (file *kdfsFieldFile) Read(ctx context.Context, f fs.FileHandle, dest []byt
 	logger.Debug("Read", "offset", off, "len", len(dest))
 
 	var err error
-	file.mu.RLock()
-	n, err := file.data.ReadAt(dest, off)
-	file.mu.RUnlock()
-	if err.(syscall.Errno) != 0 {
-		return nil, err.(syscall.Errno)
-	}
 
 	entry, err := file.kdfsServer.DB.GetEntry(nil, cleanEntryPath(path))
 	if err != nil {
 		logger.Error("Erorr in getting a entry")
 		return nil, syscall.EIO
 	}
+	fname := filepath.Base(file.Path(nil))
+	keepassKey := fsToKP[fname]
+	content := entry.GetContent(keepassKey)
+	n, err := readAt([]byte(content), off, dest)
+	if err.(syscall.Errno) != 0 {
+		return nil, err.(syscall.Errno)
+	}
+
 	if n != 0 {
 		defer func() {
 			if err = file.kdfsServer.DB.SetEntry(nil, cleanEntryPath(path), entry); err != nil {
@@ -169,13 +171,6 @@ func (file *kdfsFieldFile) Write(ctx context.Context, f fs.FileHandle, data []by
 	logger.Debug("Write", "offset", off, "len", len(data))
 
 	var err error
-	file.mu.Lock()
-	n, err := file.data.WriteAt(data, off)
-	file.mu.Unlock()
-
-	if err.(syscall.Errno) != 0 {
-		return 0, err.(syscall.Errno)
-	}
 
 	entry, err := file.kdfsServer.DB.GetEntry(nil, cleanEntryPath(path))
 	if err != nil {
@@ -190,10 +185,16 @@ func (file *kdfsFieldFile) Write(ctx context.Context, f fs.FileHandle, data []by
 
 	fname := filepath.Base(file.Path(nil))
 	keepassKey := fsToKP[fname]
+	oldContent := entry.GetContent(keepassKey)
+	newContent, n, err := writeAt([]byte(oldContent), off, data)
+	if err.(syscall.Errno) != 0 {
+		return 0, err.(syscall.Errno)
+	}
+
 	for i := range entry.Values {
 		if keepassKey == entry.Values[i].Key {
 			file.mu.RLock()
-			entry.Values[i].Value.Content = string(file.data.Bytes())
+			entry.Values[i].Value.Content = string(newContent)
 			file.mu.RUnlock()
 			break
 		}
