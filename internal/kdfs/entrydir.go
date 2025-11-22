@@ -94,6 +94,9 @@ func (dir *kdfsEntryDir) Create(ctx context.Context, name string, flags uint32, 
 	var attrOut fuse.AttrOut
 	fnode.BaseAttr(&attrOut, entry.Times)
 	out.AttrValid = attrOut.AttrValid
+	out.EntryValid = attrOut.AttrValid
+	out.EntryValidNsec = attrOut.AttrValidNsec
+	out.AttrValidNsec = attrOut.AttrValidNsec
 	out.Attr = attrOut.Attr
 
 	return child, fnode, fnode.BaseFlag(), 0

@@ -3,6 +3,8 @@ package kdfs
 import (
 	"strings"
 	"syscall"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 func ReverseMap(m map[string]string) map[string]string {
@@ -66,4 +68,14 @@ func setSize(dest []byte, n int64) ([]byte, syscall.Errno) {
 	needed := n - int64(len(dest))
 	dest = append(dest, make([]byte, needed)...)
 	return dest, 0
+}
+
+func hashPassword(password []byte) ([]byte, error) {
+	bytes, err := bcrypt.GenerateFromPassword(password, 10)
+	return bytes, err
+}
+
+func verifyHashPassword(password, hash []byte) bool {
+	err := bcrypt.CompareHashAndPassword(hash, password)
+	return err == nil
 }

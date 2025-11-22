@@ -2,18 +2,25 @@
 package kdbx
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/tobischo/gokeepasslib/v3"
 )
 
-var ErrNotFound = fmt.Errorf("not found")
+var (
+	ErrNotFound     = fmt.Errorf("not found")
+	ErrAlreadyExist = fmt.Errorf("already exists")
+)
 
 type Database struct {
-	db   *gokeepasslib.Database
-	path string
+	db     *gokeepasslib.Database
+	path   string
+	locked bool
+	mu     sync.RWMutex
 }
 
 func Open(path string, password []byte) (*Database, error) {
@@ -30,7 +37,7 @@ func Open(path string, password []byte) (*Database, error) {
 		return nil, err
 	}
 
-	return &Database{db: db, path: path}, nil
+	return &Database{db: db, path: path, locked: true}, nil
 }
 
 func (d *Database) Root() *gokeepasslib.RootData {
@@ -110,6 +117,9 @@ func (d *Database) findGroup(baseG *gokeepasslib.Group, entryPath string) (*goke
 }
 
 func (d *Database) GetEntry(baseG *gokeepasslib.Group, entryPath string) (entry gokeepasslib.Entry, err error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	baseEntry, err := d.findEntry(baseG, entryPath)
 	if err != nil {
 		return
@@ -118,15 +128,28 @@ func (d *Database) GetEntry(baseG *gokeepasslib.Group, entryPath string) (entry 
 }
 
 func (d *Database) SetEntry(baseG *gokeepasslib.Group, entryPath string, entry gokeepasslib.Entry) (err error) {
+	d.mu.Lock()
+
 	baseEntry, err := d.findEntry(baseG, entryPath)
 	if err != nil {
 		return
 	}
 	*baseEntry = entry
+	d.mu.Unlock()
 	return d.Save()
 }
 
+func (d *Database) GetState() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	return d.locked
+}
+
 func (d *Database) GetGroup(baseG *gokeepasslib.Group, groupPath string) (group gokeepasslib.Group, err error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	baseGroup, err := d.findGroup(baseG, groupPath)
 	if err != nil {
 		return
@@ -135,26 +158,58 @@ func (d *Database) GetGroup(baseG *gokeepasslib.Group, groupPath string) (group 
 }
 
 func (d *Database) SetGroup(baseG *gokeepasslib.Group, groupPath string, group gokeepasslib.Group) (err error) {
+	d.mu.Lock()
+
 	/* Updates the old group if present else add it */
 	baseGroup, err := d.findGroup(baseG, groupPath)
 	if err != nil {
 		return
 	}
 	*baseGroup = group
+	d.mu.Unlock()
 	return d.Save()
 }
 
 func (d *Database) Unlock() error {
-	return d.db.UnlockProtectedEntries()
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if !d.locked {
+		return ErrAlreadyExist
+	}
+	err := d.db.UnlockProtectedEntries()
+	if err != nil {
+		return err
+	}
+	d.locked = false
+	return err
 }
 
-func (d *Database) Lock() {
-	d.db.LockProtectedEntries()
+func (d *Database) Lock() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.locked {
+		return ErrAlreadyExist
+	}
+	err := d.db.LockProtectedEntries()
+	if err != nil {
+		return err
+	}
+	d.locked = true
+	return nil
 }
 
 func (d *Database) Save() error {
-	d.Lock()
-	defer d.Unlock()
+	err := d.Lock()
+	if err == nil {
+		defer d.Unlock()
+	} else if !errors.Is(err, ErrAlreadyExist) {
+		return err
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
 
 	file, err := os.Create(d.path)
 	if err != nil {

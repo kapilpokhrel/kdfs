@@ -2,12 +2,16 @@ package kdfs
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
 	"github.com/hanwen/go-fuse/v2/fuse"
+	"github.com/kapilpokhrel/kdfs/internal/kdbx"
 	"github.com/tobischo/gokeepasslib/v3"
 	"github.com/tobischo/gokeepasslib/v3/wrappers"
 )
@@ -71,7 +75,7 @@ func (file *kdfsLockStateFile) Read(ctx context.Context, f fs.FileHandle, dest [
 	currTime := wrappers.Now()
 	file.times.LastAccessTime = &currTime
 
-	return fuse.ReadResultData([]byte{1}), 0
+	return fuse.ReadResultData(strconv.AppendBool([]byte{}, file.kdfsServer.DB.GetState())), 0
 }
 
 type kdfsLockActionFile struct {
@@ -105,7 +109,7 @@ func NewLockActionFile(ctx context.Context, filename string, parent *fs.Inode, k
 func (file *kdfsLockActionFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	logger := slog.Default().With("lock_state_file", file.path)
 
-	if flags&uint32(os.O_APPEND|os.O_RDONLY|os.O_RDWR|os.O_TRUNC) != 0 {
+	if flags&uint32(os.O_RDONLY|os.O_RDWR|os.O_TRUNC) != 0 {
 		return nil, 0, syscall.EPERM
 	}
 	rflags := file.BaseFlag() ^ fuse.O_ANYWRITE | uint32(os.O_WRONLY)
@@ -129,5 +133,28 @@ func (file *kdfsLockActionFile) Write(ctx context.Context, f fs.FileHandle, data
 	logger := slog.Default().With("lock_action_file", file.path)
 	logger.Debug("Write", "offset", off, "len", len(data))
 
-	return 0, syscall.ENOSYS
+	if off != 0 {
+		return 0, syscall.EPERM
+	}
+	if len(data) == 0 || len(data) > 72 {
+		return 0, syscall.EPERM
+	}
+
+	if strings.ToLower(strings.TrimSpace(string(data))) == "lock" {
+		err := file.kdfsServer.DB.Lock()
+		if err != nil && !errors.Is(err, kdbx.ErrAlreadyExist) {
+			return 0, syscall.EIO
+		}
+		return 4, 0
+	}
+
+	if verifyHashPassword(data, file.kdfsServer.passwordHash) {
+		err := file.kdfsServer.DB.Unlock()
+		if err != nil && !errors.Is(err, kdbx.ErrAlreadyExist) {
+			return 0, syscall.EIO
+		}
+		return uint32(len(data)), 0
+	} else {
+		return 0, syscall.EACCES
+	}
 }

@@ -9,9 +9,10 @@ import (
 )
 
 type KDFSServer struct {
-	DB     *kdbx.Database
-	Server *fuse.Server
-	Mount  string
+	DB           *kdbx.Database
+	Server       *fuse.Server
+	Mount        string
+	passwordHash []byte
 }
 
 func NewKDFSServer(kdbxfile string, password []byte, mountpoint string) (*KDFSServer, error) {
@@ -25,7 +26,8 @@ func NewKDFSServer(kdbxfile string, password []byte, mountpoint string) (*KDFSSe
 		return nil, errors.Join(errors.New("incorrect credential"), err)
 	}
 
-	kdfsServer := &KDFSServer{DB: db, Mount: mountpoint}
+	hash, _ := hashPassword(password)
+	kdfsServer := &KDFSServer{DB: db, Mount: mountpoint, passwordHash: hash}
 
 	kdbsRoot := &kdfsRoot{root: db.Root()}
 	kdbsRoot.kdfsServer = kdfsServer

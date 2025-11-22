@@ -53,4 +53,6 @@ func (kdfs *kdfsRoot) OnAdd(ctx context.Context) {
 	for i := range kdfs.root.Groups {
 		addGroup(ctx, r, kdfs.root.Groups[i], kdfs.kdfsServer)
 	}
+	NewLockStateFile(ctx, "lockstate", r, kdfs.kdfsServer)
+	NewLockActionFile(ctx, "lockaction", r, kdfs.kdfsServer)
 }
