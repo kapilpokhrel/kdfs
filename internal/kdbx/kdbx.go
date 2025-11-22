@@ -44,76 +44,78 @@ func (d *Database) Root() *gokeepasslib.RootData {
 	return d.db.Content.Root
 }
 
-func (d *Database) findEntry(baseG *gokeepasslib.Group, entryPath string) (*gokeepasslib.Entry, error) {
-	pathSplit := strings.Split(entryPath, "/")
-	if pathSplit[0] == "" {
+func splitPath(p string) []string {
+	pathSplit := strings.Split(p, "/")
+	if len(pathSplit) > 0 && pathSplit[0] == "" {
 		pathSplit = pathSplit[1:] // Remove the root / if present
 	}
-	if baseG == nil {
-		for i, group := range d.Root().Groups {
-			if group.Name == pathSplit[0] {
-				baseG = &d.Root().Groups[i]
-				pathSplit = pathSplit[1:]
-				break
-			}
-		}
-	}
-	for range len(pathSplit) {
-		if len(pathSplit) == 1 {
-			// Entry
-			for i, entry := range baseG.Entries {
-				if entry.GetTitle() == pathSplit[0] {
-					return &baseG.Entries[i], nil
-				}
-			}
-		}
-		// Group
-		for i, group := range baseG.Groups {
-			if group.Name == pathSplit[0] {
-				baseG = &baseG.Groups[i]
-				break
-			}
-		}
-		pathSplit = pathSplit[1:]
+	return pathSplit
+}
 
+func findChildGroup(groups []gokeepasslib.Group, name string) (*gokeepasslib.Group, error) {
+	for i, group := range groups {
+		if group.Name == name {
+			return &groups[i], nil
+		}
 	}
 	return nil, ErrNotFound
 }
 
-func (d *Database) findGroup(baseG *gokeepasslib.Group, entryPath string) (*gokeepasslib.Group, error) {
-	pathSplit := strings.Split(entryPath, "/")
-	if pathSplit[0] == "" {
-		pathSplit = pathSplit[1:] // Remove the root / if present
-	}
-	if baseG == nil {
-		for i, group := range d.Root().Groups {
-			if group.Name == pathSplit[0] {
-				baseG = &d.Root().Groups[i]
-				pathSplit = pathSplit[1:]
-				break
-			}
+func findEntryInGroup(base *gokeepasslib.Group, title string) (*gokeepasslib.Entry, error) {
+	for i := range base.Entries {
+		if base.Entries[i].GetTitle() == title {
+			return &base.Entries[i], nil
 		}
 	}
+	return nil, ErrNotFound
+}
 
-	if baseG == nil {
+func (d *Database) findGroup(baseGroup *gokeepasslib.Group, groupPath string) (*gokeepasslib.Group, error) {
+	pathSplit := splitPath(groupPath)
+	if len(pathSplit) == 0 {
 		return nil, ErrNotFound
 	}
 
-	for range len(pathSplit) {
-		notfound := true
-		for i, group := range baseG.Groups {
-			if group.Name == pathSplit[0] {
-				baseG = &baseG.Groups[i]
-				notfound = false
-				break
-			}
-		}
-		if notfound {
-			return nil, ErrNotFound
+	if baseGroup == nil {
+		var err error
+		baseGroup, err = findChildGroup(d.Root().Groups, pathSplit[0])
+		if err != nil {
+			return nil, err
 		}
 		pathSplit = pathSplit[1:]
 	}
-	return baseG, nil
+
+	for len(pathSplit) > 0 {
+		next, err := findChildGroup(baseGroup.Groups, pathSplit[0])
+		if err != nil {
+			return nil, err
+		}
+		baseGroup = next
+		pathSplit = pathSplit[1:]
+	}
+	return baseGroup, nil
+}
+
+func (d *Database) findEntry(baseGroup *gokeepasslib.Group, entryPath string) (*gokeepasslib.Entry, error) {
+	pathSplit := splitPath(entryPath)
+	if len(pathSplit) == 0 {
+		return nil, ErrNotFound
+	}
+
+	entryName := pathSplit[len(pathSplit)-1]
+	groupPath := pathSplit[:len(pathSplit)-1]
+
+	var err error
+	baseGroup, err = d.findGroup(baseGroup, strings.Join(groupPath, "/"))
+	if err != nil {
+		return nil, ErrNotFound
+	}
+
+	entry, err := findEntryInGroup(baseGroup, entryName)
+	if err != nil {
+		return nil, err
+	}
+	return entry, nil
 }
 
 func (d *Database) GetEntry(baseG *gokeepasslib.Group, entryPath string) (entry gokeepasslib.Entry, err error) {

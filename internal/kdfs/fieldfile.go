@@ -44,6 +44,13 @@ func NewFieldFile(ctx context.Context, filename string, parent *fs.Inode, kdfsSe
 	return file, ch
 }
 
+/* I just realized this, for the function like these two,
+which are just wrapper around another function sharing the same return values
+does compiler replaces the function call with the code?
+or does it copy the struct to getEntry and then again copy it for the underlying function.
+That must be heavy, I am sure it must be smarter than this.
+*/
+
 func (file *kdfsFieldFile) getEntry() (gokeepasslib.Entry, error) {
 	return file.kdfsServer.DB.GetEntry(nil, cleanEntryPath(file.path))
 }
@@ -52,7 +59,7 @@ func (file *kdfsFieldFile) setEntry(entry gokeepasslib.Entry) error {
 	return file.kdfsServer.DB.SetEntry(nil, cleanEntryPath(file.path), entry)
 }
 
-func (file *kdfsFieldFile) getContent(entry gokeepasslib.Entry) string {
+func (file *kdfsFieldFile) getContent(entry *gokeepasslib.Entry) string {
 	fname := filepath.Base(file.path)
 	keepassKey := fsToKP[fname]
 	return entry.GetContent(keepassKey)
@@ -78,7 +85,7 @@ func (file *kdfsFieldFile) Getattr(ctx context.Context, f fs.FileHandle, out *fu
 		return syscall.EIO
 	}
 
-	content := file.getContent(entry)
+	content := file.getContent(&entry)
 
 	file.BaseAttr(out, entry.Times)
 	out.Size = uint64(len(content))
@@ -115,7 +122,7 @@ func (file *kdfsFieldFile) Setattr(ctx context.Context, f fs.FileHandle, in *fus
 	if in.Valid&fuse.FATTR_SIZE != 0 {
 		out.Size = in.Size
 
-		oldContent := file.getContent(entry)
+		oldContent := file.getContent(&entry)
 		newContent, err := setSize([]byte(entry.GetContent(oldContent)), int64(in.Size))
 		if err != 0 {
 			return err
@@ -140,7 +147,7 @@ func (file *kdfsFieldFile) Read(ctx context.Context, f fs.FileHandle, dest []byt
 		logger.Error("Erorr in getting a entry")
 		return nil, syscall.EIO
 	}
-	content := file.getContent(entry)
+	content := file.getContent(&entry)
 	n, err := readAt([]byte(content), off, dest)
 	if err.(syscall.Errno) != 0 {
 		return nil, err.(syscall.Errno)
@@ -177,7 +184,7 @@ func (file *kdfsFieldFile) Write(ctx context.Context, f fs.FileHandle, data []by
 		}
 	}()
 
-	oldContent := file.getContent(entry)
+	oldContent := file.getContent(&entry)
 	newContent, n, err := writeAt([]byte(oldContent), off, data)
 	if err.(syscall.Errno) != 0 {
 		return 0, err.(syscall.Errno)
