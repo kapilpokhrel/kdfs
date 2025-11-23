@@ -41,8 +41,8 @@ func NewKDFSServer(kdbxfile string, password []byte, mountpoint string) (*KDFSSe
 	return kdfsServer, nil
 }
 
-func (s *KDFSServer) Umount() {
-	s.Server.Unmount()
+func (s *KDFSServer) Umount() error {
+	return s.Server.Unmount()
 }
 
 func (s *KDFSServer) Wait() {

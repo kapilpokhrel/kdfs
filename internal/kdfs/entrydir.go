@@ -40,7 +40,7 @@ func (dir *kdfsEntryDir) setEntry(entry gokeepasslib.Entry) error {
 }
 
 func (dir *kdfsEntryDir) appendContent(name string, entry *gokeepasslib.Entry) syscall.Errno {
-	keepassKey, ok := fsToKP[name]
+	keepassKey, ok := FsToKp[name]
 	if !ok {
 		return syscall.EINVAL
 	}

@@ -15,14 +15,14 @@ func ReverseMap(m map[string]string) map[string]string {
 	return r
 }
 
-var kpToFS = map[string]string{
+var KpToFs = map[string]string{
 	"UserName": "username",
 	"Password": "password",
 	"URL":      "url",
 	"Notes":    "notes",
 }
 
-var fsToKP = ReverseMap(kpToFS)
+var FsToKp = ReverseMap(KpToFs)
 
 func cleanEntryPath(entryPath string) string {
 	splits := strings.Split(entryPath, ".entry")

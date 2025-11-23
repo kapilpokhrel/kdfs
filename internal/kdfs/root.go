@@ -27,7 +27,7 @@ func addEntry(ctx context.Context, parent *fs.Inode, e gokeepasslib.Entry, serve
 	_, ch := NewEntryDir(ctx, filename, parent, server)
 
 	for _, valueData := range e.Values {
-		fname, ok := kpToFS[valueData.Key]
+		fname, ok := KpToFs[valueData.Key]
 		if !ok {
 			continue
 		}

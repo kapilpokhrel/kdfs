@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"os"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -49,7 +48,7 @@ func (file *kdfsLockStateFile) Getattr(ctx context.Context, f fs.FileHandle, out
 
 	file.BaseAttr(out, file.times)
 	out.Mode = uint32(0o0440)
-	out.Size = uint64(1)
+	out.Size = uint64(2)
 
 	logger.Debug("GetAttr", slog.Group("OutAttr", "Mode", out.Mode, "Size", out.Size))
 	return 0
@@ -62,7 +61,8 @@ func (file *kdfsLockStateFile) Open(ctx context.Context, flags uint32) (fs.FileH
 		return nil, 0, syscall.EPERM
 	}
 
-	rflags := file.BaseFlag() ^ fuse.O_ANYWRITE | uint32(os.O_RDONLY)
+	rflags := file.BaseFlag()
+	rflags &= ^fuse.O_ANYWRITE
 	logger.Debug("Open", "inflags", flags, "outflags", rflags)
 
 	return fs.FileHandle(file), rflags, 0
@@ -75,7 +75,15 @@ func (file *kdfsLockStateFile) Read(ctx context.Context, f fs.FileHandle, dest [
 	currTime := wrappers.Now()
 	file.times.LastAccessTime = &currTime
 
-	return fuse.ReadResultData(strconv.AppendBool([]byte{}, file.kdfsServer.DB.GetState())), 0
+	if off > 0 {
+		return fuse.ReadResultData([]byte{}), 0
+	}
+
+	if file.kdfsServer.DB.GetState() {
+		return fuse.ReadResultData([]byte("t")), 0
+	} else {
+		return fuse.ReadResultData([]byte("f")), 0
+	}
 }
 
 type kdfsLockActionFile struct {
@@ -112,7 +120,8 @@ func (file *kdfsLockActionFile) Open(ctx context.Context, flags uint32) (fs.File
 	if flags&uint32(os.O_RDONLY|os.O_RDWR|os.O_TRUNC) != 0 {
 		return nil, 0, syscall.EPERM
 	}
-	rflags := file.BaseFlag() ^ fuse.O_ANYWRITE | uint32(os.O_WRONLY)
+	rflags := file.BaseFlag()
+	rflags &= ^fuse.O_ANYWRITE
 	logger.Debug("Open", "inflags", flags, "outflags", rflags)
 
 	return fs.FileHandle(file), rflags, 0

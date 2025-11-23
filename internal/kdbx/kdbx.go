@@ -23,6 +23,10 @@ type Database struct {
 	mu     sync.RWMutex
 }
 
+func NewFromDB(db *gokeepasslib.Database, path string, state bool) *Database {
+	return &Database{db: db, path: path, locked: state}
+}
+
 func Open(path string, password []byte) (*Database, error) {
 	file, err := os.Open(path)
 	if err != nil {

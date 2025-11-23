@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,25 +16,12 @@ func collectExpectedFiles(g gokeepasslib.Group, base string, paths *map[string]s
 		if len(title) == 0 {
 			continue
 		}
-		entryBase := filepath.Join(base, entry.GetTitle())
+		entryBase := filepath.Join(base, fmt.Sprintf("%s.entry", entry.GetTitle()))
+
 		for _, val := range entry.Values {
-			switch val.Key {
-			case "UserName":
-				if val.Value.Content != "" {
-					(*paths)[filepath.Join(entryBase, "username")] = val.Value.Content
-				}
-			case "Password":
-				if val.Value.Content != "" {
-					(*paths)[filepath.Join(entryBase, "password")] = val.Value.Content
-				}
-			case "Notes":
-				if val.Value.Content != "" {
-					(*paths)[filepath.Join(entryBase, "notes")] = val.Value.Content
-				}
-			case "URL":
-				if val.Value.Content != "" {
-					(*paths)[filepath.Join(entryBase, "url")] = val.Value.Content
-				}
+			fname, ok := kdfs.KpToFs[val.Key]
+			if ok {
+				(*paths)[filepath.Join(entryBase, fname)] = val.Value.Content
 			}
 		}
 	}
@@ -45,7 +33,7 @@ func collectExpectedFiles(g gokeepasslib.Group, base string, paths *map[string]s
 	}
 }
 
-func TestMountRONLY(t *testing.T) {
+func TestMountReadOnly(t *testing.T) {
 	kdbxFile := "./_datafiles/example.kdbx"
 	password := []byte("abcdefg12345678")
 

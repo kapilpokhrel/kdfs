@@ -61,13 +61,13 @@ func (file *kdfsFieldFile) setEntry(entry gokeepasslib.Entry) error {
 
 func (file *kdfsFieldFile) getContent(entry *gokeepasslib.Entry) string {
 	fname := filepath.Base(file.path)
-	keepassKey := fsToKP[fname]
+	keepassKey := FsToKp[fname]
 	return entry.GetContent(keepassKey)
 }
 
 func (file *kdfsFieldFile) setContent(entry *gokeepasslib.Entry, newContent []byte) {
 	fname := filepath.Base(file.path)
-	keepassKey := fsToKP[fname]
+	keepassKey := FsToKp[fname]
 	for i := range entry.Values {
 		if keepassKey == entry.Values[i].Key {
 			entry.Values[i].Value.Content = string(newContent)
