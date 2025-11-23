@@ -70,7 +70,14 @@ func findEntryInGroup(base *gokeepasslib.Group, title string) (*gokeepasslib.Ent
 	return nil, ErrNotFound
 }
 
+var groupCache = make(map[string]*gokeepasslib.Group)
+
 func (d *Database) findGroup(baseGroup *gokeepasslib.Group, groupPath string) (*gokeepasslib.Group, error) {
+	cachedGroup, ok := groupCache[groupPath]
+	if ok {
+		return cachedGroup, nil
+	}
+
 	pathSplit := splitPath(groupPath)
 	if len(pathSplit) == 0 {
 		return nil, ErrNotFound
@@ -93,10 +100,19 @@ func (d *Database) findGroup(baseGroup *gokeepasslib.Group, groupPath string) (*
 		baseGroup = next
 		pathSplit = pathSplit[1:]
 	}
+
+	groupCache[groupPath] = baseGroup
 	return baseGroup, nil
 }
 
+var entryCache = make(map[string]*gokeepasslib.Entry)
+
 func (d *Database) findEntry(baseGroup *gokeepasslib.Group, entryPath string) (*gokeepasslib.Entry, error) {
+	cachedEntry, ok := entryCache[entryPath]
+	if ok {
+		return cachedEntry, nil
+	}
+
 	pathSplit := splitPath(entryPath)
 	if len(pathSplit) == 0 {
 		return nil, ErrNotFound
@@ -115,6 +131,8 @@ func (d *Database) findEntry(baseGroup *gokeepasslib.Group, entryPath string) (*
 	if err != nil {
 		return nil, err
 	}
+
+	entryCache[entryPath] = entry
 	return entry, nil
 }
 

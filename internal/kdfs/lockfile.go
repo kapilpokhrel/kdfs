@@ -140,11 +140,13 @@ func (file *kdfsLockActionFile) Write(ctx context.Context, f fs.FileHandle, data
 		return 0, syscall.EPERM
 	}
 
+	currTime := wrappers.Now()
 	if strings.ToLower(strings.TrimSpace(string(data))) == "lock" {
 		err := file.kdfsServer.DB.Lock()
 		if err != nil && !errors.Is(err, kdbx.ErrAlreadyExist) {
 			return 0, syscall.EIO
 		}
+		file.times.LastModificationTime = &currTime
 		return 4, 0
 	}
 
@@ -153,6 +155,7 @@ func (file *kdfsLockActionFile) Write(ctx context.Context, f fs.FileHandle, data
 		if err != nil && !errors.Is(err, kdbx.ErrAlreadyExist) {
 			return 0, syscall.EIO
 		}
+		file.times.LastModificationTime = &currTime
 		return uint32(len(data)), 0
 	} else {
 		return 0, syscall.EACCES
