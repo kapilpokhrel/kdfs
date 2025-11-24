@@ -63,9 +63,8 @@ func main() {
 		var err error
 		pass, err = term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
-			pass = []byte("abcdefg12345678")
 			slog.Error("Couldn't read password from user", "error", err)
-			//os.Exit(1)
+			os.Exit(1)
 		}
 
 		if daemon {
