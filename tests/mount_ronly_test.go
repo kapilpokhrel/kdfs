@@ -34,7 +34,10 @@ func collectExpectedFiles(g gokeepasslib.Group, base string, paths *map[string]s
 }
 
 func TestMountReadOnly(t *testing.T) {
-	kdbxFile := "./_datafiles/example.kdbx"
+	kdbxFile, err := cloneKDBX()
+	if err != nil {
+		t.Fatalf("error cloning a kdbx file %v", err)
+	}
 	password := []byte("abcdefg12345678")
 
 	mountDir := t.TempDir()

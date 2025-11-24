@@ -3,6 +3,7 @@ package kdfs
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
@@ -65,6 +66,12 @@ func (dir *kdfsEntryDir) appendContent(name string, entry *gokeepasslib.Entry) s
 	return 0
 }
 
+var (
+	_ = (fs.NodeGetattrer)((*kdfsEntryDir)(nil))
+	_ = (fs.NodeCreater)((*kdfsEntryDir)(nil))
+	_ = (fs.NodeUnlinker)((*kdfsEntryDir)(nil))
+)
+
 func (dir *kdfsEntryDir) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
 	logger := slog.Default().With("EntryDir", dir.path)
 
@@ -113,5 +120,39 @@ func (dir *kdfsEntryDir) Getattr(ctx context.Context, f fs.FileHandle, out *fuse
 
 	dir.BaseAttr(out, entry.Times)
 	logger.Debug("GetAttr", slog.Group("OutAttr", "Mode", out.Mode, "Size", out.Size))
+	return 0
+}
+
+func (dir *kdfsEntryDir) Unlink(ctx context.Context, name string) syscall.Errno {
+	logger := slog.Default().With("EntryDir", dir.path)
+
+	logger.Debug("Unlink", "name", name)
+	keepassKey, ok := FsToKp[name]
+	if !ok {
+		return syscall.EINVAL
+	}
+
+	entry, err := dir.getEntry()
+	if err != nil {
+		logger.Error("Error findng a entry directory", "error", err)
+		return syscall.EIO
+	}
+	defer func() {
+		if err = dir.setEntry(entry); err != nil {
+			logger.Error("Error saving a entry", "error", err)
+		}
+	}()
+
+	deleteIndex := 1
+	for i, value := range entry.Values {
+		if value.Key == keepassKey {
+			deleteIndex = i
+		}
+	}
+	if deleteIndex >= 0 {
+		entry.Values = slices.Delete(entry.Values, deleteIndex, deleteIndex+1)
+	} else {
+		return syscall.ENOENT
+	}
 	return 0
 }

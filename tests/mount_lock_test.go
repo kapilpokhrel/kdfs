@@ -3,6 +3,7 @@ package tests
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,8 +46,32 @@ func unlock(rootDir string, password []byte) error {
 	return writeToLockFile(rootDir, password)
 }
 
+func cloneKDBX() (string, error) {
+	tmp, err := os.CreateTemp("", "")
+	if err != nil {
+		return "", err
+	}
+	defer tmp.Close()
+
+	src, err := os.Open("_datafiles/example.kdbx")
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+
+	_, err = io.Copy(tmp, src)
+	if err != nil {
+		return "", err
+	}
+
+	return tmp.Name(), nil
+}
+
 func TestMountLockUnlock(t *testing.T) {
-	kdbxFile := "./_datafiles/example.kdbx"
+	kdbxFile, err := cloneKDBX()
+	if err != nil {
+		t.Fatalf("error cloning a kdbx file %v", err)
+	}
 	password := []byte("abcdefg12345678")
 
 	mountDir := t.TempDir()

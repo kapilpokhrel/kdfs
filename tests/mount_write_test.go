@@ -60,14 +60,6 @@ func checkTestEntry(baseDir string, name string) error {
 	return nil
 }
 
-func createTestGroup(rootDir string, name string) error {
-	groupDir := filepath.Join(rootDir, name)
-	if err := os.MkdirAll(groupDir, 0o755); err != nil {
-		return errors.Join(err, errors.New("failed making group dir"))
-	}
-	return nil
-}
-
 func TestMountWriteThenRead(t *testing.T) {
 	/* Writing */
 	dbPath := filepath.Join(t.TempDir(), "testdb.kdbx")
@@ -81,10 +73,7 @@ func TestMountWriteThenRead(t *testing.T) {
 		t.Fatalf("mount failed: %v", err)
 	}
 
-	if err := createTestGroup(filepath.Join(mountDir, "RootGroup"), "TestGroup"); err != nil {
-		t.Fatal(err)
-	}
-	if err := createTestEntry(filepath.Join(mountDir, "RootGroup"), "TestEntry"); err != nil {
+	if err := createTestEntry(filepath.Join(mountDir, "RootGroup", "TestGroup"), "TestEntry"); err != nil {
 		t.Fatal(err)
 	}
 	if err := createTestEntry(filepath.Join(mountDir, "RootGroup"), "TestEntry"); err != nil {
