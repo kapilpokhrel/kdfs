@@ -107,7 +107,6 @@ func (s *KDFSServer) syncToOriginal() {
 }
 
 func (s *KDFSServer) Umount() error {
-	s.syncToOriginal()
 	return s.Server.Unmount()
 }
 

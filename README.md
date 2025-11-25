@@ -36,7 +36,7 @@ go build -o kdfs ./cmd/main
 ./kdfs /mount/point /path/to/database.kdbx
 ```
 
-- The program will prompt for the database password (or you can wire it via env/config).
+- The program will prompt for the database password (or you can wire it via env `KDBX_DB_MASTER_KEY`).
 - The mountpoint must exist and be empty.
 - The filesystem will stay mounted until unmounted as shwon below or interrupted (`Ctrl+C`) in `-daemon=false` mode
 ```

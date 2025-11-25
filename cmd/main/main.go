@@ -19,8 +19,12 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-func setupLogger() {
-	stdHandler := tint.NewHandler(os.Stdout, &tint.Options{Level: slog.LevelDebug})
+func setupLogger(debug bool) {
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
+	}
+	stdHandler := tint.NewHandler(os.Stdout, &tint.Options{Level: level})
 
 	homeDir, _ := os.UserHomeDir()
 	rotFileWriter := &lumberjack.Logger{
@@ -37,18 +41,21 @@ func setupLogger() {
 }
 
 func main() {
-	setupLogger()
-
 	// Flags
 	var daemon bool
+	var debug bool
 	flag.BoolVar(&daemon, "daemon", false, "Run as a background daemon")
+	flag.BoolVar(&debug, "debug", false, "Enable Debug Mode")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(),
 			"Usage: %s [ options ] <mountpoint> <vault (kdbx file)>\n\n", os.Args[0])
 		fmt.Fprintln(flag.CommandLine.Output(), "Options:")
 		flag.PrintDefaults()
 	}
+
 	flag.Parse()
+	setupLogger(debug)
+
 	if flag.NArg() < 2 {
 		flag.Usage()
 		os.Exit(2)
@@ -58,13 +65,15 @@ func main() {
 
 	// Demoanized execution
 	if os.Getenv("DAEMON") != "1" {
-		fmt.Fprintln(os.Stderr, "Enter Password: ")
-
 		var err error
-		pass, err = term.ReadPassword(int(os.Stdin.Fd()))
-		if err != nil {
-			slog.Error("Couldn't read password from user", "error", err)
-			os.Exit(1)
+		pass = []byte(os.Getenv("KDBX_DB_MASTER_KEY"))
+		if len(pass) == 0 {
+			fmt.Fprintln(os.Stderr, "Enter Password: ")
+			pass, err = term.ReadPassword(int(os.Stdin.Fd()))
+			if err != nil {
+				slog.Error("Couldn't read password from user", "error", err)
+				os.Exit(1)
+			}
 		}
 
 		if daemon {
