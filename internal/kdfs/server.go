@@ -110,7 +110,9 @@ func (s *KDFSServer) Umount() error {
 	return s.Server.Unmount()
 }
 
-func (s *KDFSServer) Wait() {
+func (s *KDFSServer) Wait(saveOnExit bool) {
 	s.Server.Wait()
-	s.syncToOriginal()
+	if saveOnExit {
+		s.syncToOriginal()
+	}
 }

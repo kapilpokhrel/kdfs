@@ -44,8 +44,10 @@ func main() {
 	// Flags
 	var daemon bool
 	var debug bool
+	var saveOnExit bool
 	flag.BoolVar(&daemon, "daemon", false, "Run as a background daemon")
 	flag.BoolVar(&debug, "debug", false, "Enable Debug Mode")
+	flag.BoolVar(&saveOnExit, "saveonexit", true, "Save on Exit")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(),
 			"Usage: %s [ options ] <mountpoint> <vault (kdbx file)>\n\n", os.Args[0])
@@ -116,5 +118,5 @@ func main() {
 		<-sigCh
 		server.Umount()
 	}()
-	server.Wait()
+	server.Wait(saveOnExit)
 }
