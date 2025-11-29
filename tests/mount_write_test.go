@@ -68,7 +68,9 @@ func TestMountWriteThenRead(t *testing.T) {
 	createNewKdbxDB(dbPath, password)
 
 	mountDir := t.TempDir()
-	server, err := kdfs.NewKDFSServer(dbPath, password, mountDir)
+	serverCfg := kdfs.KDFSConfig{KDBXValutPath: dbPath, MountPoint: mountDir}
+	server, err := kdfs.NewKDFSServer(serverCfg, password)
+
 	if err != nil {
 		t.Fatalf("mount failed: %v", err)
 	}
@@ -86,7 +88,9 @@ func TestMountWriteThenRead(t *testing.T) {
 
 	/* Verifying the write */
 	mountDir2 := t.TempDir()
-	server2, err := kdfs.NewKDFSServer(dbPath, password, mountDir2)
+	serverCfg2 := kdfs.KDFSConfig{KDBXValutPath: dbPath, MountPoint: mountDir2}
+	server2, err := kdfs.NewKDFSServer(serverCfg2, password)
+
 	if err != nil {
 		t.Fatalf("second mount failed: %v", err)
 	}

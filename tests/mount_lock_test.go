@@ -76,7 +76,9 @@ func TestMountLockUnlock(t *testing.T) {
 
 	mountDir := t.TempDir()
 
-	server, err := kdfs.NewKDFSServer(kdbxFile, password, mountDir)
+	serverCfg := kdfs.KDFSConfig{KDBXValutPath: kdbxFile, MountPoint: mountDir}
+	server, err := kdfs.NewKDFSServer(serverCfg, password)
+
 	if err != nil {
 		t.Fatalf("failed to create kdfs server, %v", err)
 	}

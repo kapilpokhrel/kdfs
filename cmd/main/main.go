@@ -42,27 +42,31 @@ func setupLogger(debug bool) {
 
 func main() {
 	// Flags
+	flagset := flag.CommandLine
 	var daemon bool
 	var debug bool
-	var saveOnExit bool
-	flag.BoolVar(&daemon, "daemon", false, "Run as a background daemon")
-	flag.BoolVar(&debug, "debug", false, "Enable Debug Mode")
-	flag.BoolVar(&saveOnExit, "saveonexit", true, "Save on Exit")
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(),
+	flagset.BoolVar(&daemon, "daemon", false, "Run as a background daemon")
+	flagset.BoolVar(&debug, "debug", false, "Enable Debug Mode")
+
+	var serverCfg kdfs.KDFSConfig
+	kdfs.AddFlags(flagset, &serverCfg)
+
+	flagset.Usage = func() {
+		fmt.Fprintf(flagset.Output(),
 			"Usage: %s [ options ] <mountpoint> <vault (kdbx file)>\n\n", os.Args[0])
-		fmt.Fprintln(flag.CommandLine.Output(), "Options:")
+		fmt.Fprintln(flagset.Output(), "Options:")
 		flag.PrintDefaults()
 	}
 
-	flag.Parse()
-	setupLogger(debug)
+	flagset.Parse(os.Args[1:])
 
-	if flag.NArg() < 2 {
+	args := flagset.Args()
+	if len(args) < 2 {
 		flag.Usage()
 		os.Exit(2)
 	}
 
+	setupLogger(debug)
 	var pass []byte
 
 	// Demoanized execution
@@ -102,7 +106,9 @@ func main() {
 		pass, _ = io.ReadAll(os.Stdin)
 	}
 
-	server, err := kdfs.NewKDFSServer(flag.Arg(1), pass, flag.Arg(0))
+	serverCfg.MountPoint = args[0]
+	serverCfg.KDBXValutPath = args[1]
+	server, err := kdfs.NewKDFSServer(serverCfg, pass)
 	if err != nil {
 		slog.Error("Failed to create a kdfs server", "error", err)
 		os.Exit(1)
@@ -118,5 +124,5 @@ func main() {
 		<-sigCh
 		server.Umount()
 	}()
-	server.Wait(saveOnExit)
+	server.Wait()
 }

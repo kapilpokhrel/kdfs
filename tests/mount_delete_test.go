@@ -29,7 +29,9 @@ func TestMountDelete(t *testing.T) {
 	db.Save()
 
 	mountDir := t.TempDir()
-	server, err := kdfs.NewKDFSServer(dbPath, password, mountDir)
+
+	serverCfg := kdfs.KDFSConfig{KDBXValutPath: dbPath, MountPoint: mountDir}
+	server, err := kdfs.NewKDFSServer(serverCfg, password)
 	if err != nil {
 		t.Fatalf("mount failed: %v", err)
 	}

@@ -2,6 +2,7 @@ package kdfs
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -17,10 +18,21 @@ import (
 type KDFSServer struct {
 	DB           *kdbx.Database
 	Server       *fuse.Server
-	Mount        string
 	passwordHash []byte
 	openTime     time.Time
-	kdbxFilepath string
+	Cfg          KDFSConfig
+}
+
+type KDFSConfig struct {
+	MountPoint       string
+	KDBXValutPath    string
+	saveOnExit       bool
+	autoLockDuration time.Duration
+}
+
+func AddFlags(flagset *flag.FlagSet, cfg *KDFSConfig) {
+	flagset.BoolVar(&cfg.saveOnExit, "saveonexit", true, "Save on Exit")
+	flagset.DurationVar(&cfg.autoLockDuration, "autolockduration", 5*time.Minute, "auto lock duration")
 }
 
 func getCopyPath(kdbxfile string) string {
@@ -52,8 +64,15 @@ func copyKdbxFile(kdbxfile string) (string, error) {
 	return copyFilepath, nil
 }
 
-func NewKDFSServer(kdbxfile string, password []byte, mountpoint string) (*KDFSServer, error) {
-	copyFilepath, err := copyKdbxFile(kdbxfile)
+func NewKDFSServer(cfg KDFSConfig, password []byte) (*KDFSServer, error) {
+	if len(cfg.MountPoint) == 0 {
+		return nil, errors.New("empty mountpoint")
+	}
+	if len(cfg.KDBXValutPath) == 0 {
+		return nil, errors.New("empty kdbx valut path")
+	}
+
+	copyFilepath, err := copyKdbxFile(cfg.KDBXValutPath)
 	if err != nil {
 		return nil, err
 	}
@@ -68,26 +87,29 @@ func NewKDFSServer(kdbxfile string, password []byte, mountpoint string) (*KDFSSe
 	}
 
 	hash, _ := hashPassword(password)
-	kdfsServer := &KDFSServer{DB: db, Mount: mountpoint, passwordHash: hash, kdbxFilepath: kdbxfile}
+	kdfsServer := &KDFSServer{DB: db, passwordHash: hash, Cfg: cfg}
 
 	kdbsRoot := &kdfsRoot{root: db.Root()}
 	kdbsRoot.kdfsServer = kdfsServer
 
-	server, err := fs.Mount(mountpoint, kdbsRoot, &fs.Options{})
+	server, err := fs.Mount(cfg.MountPoint, kdbsRoot, &fs.Options{})
 	if err != nil {
 		return nil, errors.Join(errors.New("mount failed"), err)
 	}
 
 	kdfsServer.Server = server
 	kdfsServer.openTime = time.Now()
+	if cfg.autoLockDuration != 0 {
+		go db.StartAutoLockTicker(cfg.autoLockDuration, 10*time.Second)
+	}
 	return kdfsServer, nil
 }
 
 func (s *KDFSServer) syncToOriginal() {
 	// This is the side effect so it doesn't return error but rather just logs it
-	copyPath := getCopyPath(s.kdbxFilepath)
+	copyPath := getCopyPath(s.Cfg.KDBXValutPath)
 	logger := slog.Default().With("Auto Copy Aborted (do the manual copy)", copyPath)
-	originalFileStat, err := os.Stat(s.kdbxFilepath)
+	originalFileStat, err := os.Stat(s.Cfg.KDBXValutPath)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Error getting original file stat %v", err))
 		return
@@ -98,21 +120,22 @@ func (s *KDFSServer) syncToOriginal() {
 		return
 	}
 
-	if err := os.Rename(copyPath, s.kdbxFilepath); err != nil {
+	if err := os.Rename(copyPath, s.Cfg.KDBXValutPath); err != nil {
 		logger.Error(fmt.Sprintf("Error renaming the working file to original file %v", err))
 		return
 	}
 
-	slog.Info("Original kdbxfile updated", "filepath", s.kdbxFilepath)
+	slog.Info("Original kdbxfile updated", "filepath", s.Cfg.KDBXValutPath)
 }
 
 func (s *KDFSServer) Umount() error {
 	return s.Server.Unmount()
 }
 
-func (s *KDFSServer) Wait(saveOnExit bool) {
+func (s *KDFSServer) Wait() {
 	s.Server.Wait()
-	if saveOnExit {
+	s.DB.CloseCn <- true
+	if s.Cfg.saveOnExit {
 		s.syncToOriginal()
 	}
 }

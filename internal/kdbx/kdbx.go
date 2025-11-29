@@ -4,9 +4,11 @@ package kdbx
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tobischo/gokeepasslib/v3"
 )
@@ -17,10 +19,12 @@ var (
 )
 
 type Database struct {
-	db     *gokeepasslib.Database
-	path   string
-	locked bool
-	mu     sync.RWMutex
+	db            *gokeepasslib.Database
+	path          string
+	locked        bool
+	mu            sync.RWMutex
+	lastOperation time.Time
+	CloseCn       chan bool
 }
 
 func NewFromDB(db *gokeepasslib.Database, path string, state bool) *Database {
@@ -41,7 +45,7 @@ func Open(path string, password []byte) (*Database, error) {
 		return nil, err
 	}
 
-	return &Database{db: db, path: path, locked: true}, nil
+	return &Database{db: db, path: path, locked: true, lastOperation: time.Now(), CloseCn: make(chan bool)}, nil
 }
 
 func (d *Database) Root() *gokeepasslib.RootData {
@@ -141,6 +145,7 @@ func (d *Database) findEntry(baseGroup *gokeepasslib.Group, entryPath string) (*
 }
 
 func (d *Database) GetEntry(baseG *gokeepasslib.Group, entryPath string) (entry gokeepasslib.Entry, err error) {
+	defer func() { d.lastOperation = time.Now() }()
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -152,6 +157,7 @@ func (d *Database) GetEntry(baseG *gokeepasslib.Group, entryPath string) (entry 
 }
 
 func (d *Database) SetEntry(baseG *gokeepasslib.Group, entryPath string, entry gokeepasslib.Entry) (err error) {
+	defer func() { d.lastOperation = time.Now() }()
 	d.mu.Lock()
 
 	baseEntry, err := d.findEntry(baseG, entryPath)
@@ -171,6 +177,7 @@ func (d *Database) GetState() bool {
 }
 
 func (d *Database) GetGroup(baseG *gokeepasslib.Group, groupPath string) (group gokeepasslib.Group, err error) {
+	defer func() { d.lastOperation = time.Now() }()
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -182,6 +189,7 @@ func (d *Database) GetGroup(baseG *gokeepasslib.Group, groupPath string) (group 
 }
 
 func (d *Database) SetGroup(baseG *gokeepasslib.Group, groupPath string, group gokeepasslib.Group) (err error) {
+	defer func() { d.lastOperation = time.Now() }()
 	d.mu.Lock()
 
 	/* Updates the old group if present else add it */
@@ -195,6 +203,7 @@ func (d *Database) SetGroup(baseG *gokeepasslib.Group, groupPath string, group g
 }
 
 func (d *Database) Unlock() error {
+	defer func() { d.lastOperation = time.Now() }()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -210,6 +219,7 @@ func (d *Database) Unlock() error {
 }
 
 func (d *Database) Lock() error {
+	defer func() { d.lastOperation = time.Now() }()
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -247,4 +257,29 @@ func (d *Database) Save() error {
 
 func (d *Database) Raw() *gokeepasslib.Database {
 	return d.db
+}
+
+func (d *Database) StartAutoLockTicker(autoLockTime time.Duration, tickerInterval time.Duration) {
+	ticker := time.NewTicker(tickerInterval)
+	for {
+		select {
+		case <-d.CloseCn:
+			return
+		case <-ticker.C:
+		}
+		d.mu.RLock()
+		if time.Since(d.lastOperation) < autoLockTime {
+			d.mu.RUnlock()
+			continue
+		}
+		if d.locked {
+			d.mu.RUnlock()
+			continue
+		}
+		d.mu.RUnlock()
+
+		logger := slog.Default()
+		logger.Info("Locking the database after inactive period")
+		d.Lock()
+	}
 }
