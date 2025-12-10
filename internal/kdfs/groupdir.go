@@ -48,6 +48,11 @@ func (dir *kdfsGroupDir) setGroup(group gokeepasslib.Group) error {
 }
 
 func (dir *kdfsGroupDir) Mkdir(ctx context.Context, name string, mode uint32, out *fuse.EntryOut) (*fs.Inode, syscall.Errno) {
+	perm := getPermission(ctx, dir.DefaultMode())
+	if !hasWriteAccess(perm) {
+		return nil, syscall.EPERM
+	}
+
 	logger := slog.Default().With("GroupDir", dir.path)
 
 	group, err := dir.getGroup()
@@ -112,6 +117,11 @@ func (dir *kdfsGroupDir) Getattr(ctx context.Context, f fs.FileHandle, out *fuse
 }
 
 func (dir *kdfsGroupDir) Rmdir(ctx context.Context, name string) syscall.Errno {
+	perm := getPermission(ctx, dir.DefaultMode())
+	if !hasWriteAccess(perm) {
+		return syscall.EPERM
+	}
+
 	logger := slog.Default().With("GroupDir", dir.path)
 
 	group, err := dir.getGroup()

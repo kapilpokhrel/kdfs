@@ -92,7 +92,9 @@ func NewKDFSServer(cfg KDFSConfig, password []byte) (*KDFSServer, error) {
 	kdbsRoot := &kdfsRoot{root: db.Root()}
 	kdbsRoot.kdfsServer = kdfsServer
 
-	server, err := fs.Mount(cfg.MountPoint, kdbsRoot, &fs.Options{})
+	options := fs.Options{UID: uint32(os.Getuid()), GID: uint32(os.Getgid()), NullPermissions: true}
+	// options.AllowOther = true
+	server, err := fs.Mount(cfg.MountPoint, kdbsRoot, &options)
 	if err != nil {
 		return nil, errors.Join(errors.New("mount failed"), err)
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log/slog"
-	"os"
 	"strings"
 	"syscall"
 
@@ -57,10 +56,9 @@ func (file *kdfsLockStateFile) Getattr(ctx context.Context, f fs.FileHandle, out
 func (file *kdfsLockStateFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	logger := slog.Default().With("lock_state_file", file.path)
 
-	if flags&uint32(os.O_APPEND|os.O_WRONLY|os.O_RDWR|os.O_TRUNC) != 0 {
+	if !verifyOpenPermission(ctx, flags, uint32(0o440)) {
 		return nil, 0, syscall.EPERM
 	}
-
 	rflags := file.BaseFlag()
 	rflags &= ^fuse.O_ANYWRITE
 	logger.Debug("Open", "inflags", flags, "outflags", rflags)
@@ -117,7 +115,7 @@ func NewLockActionFile(ctx context.Context, filename string, parent *fs.Inode, k
 func (file *kdfsLockActionFile) Open(ctx context.Context, flags uint32) (fs.FileHandle, uint32, syscall.Errno) {
 	logger := slog.Default().With("lock_state_file", file.path)
 
-	if flags&uint32(os.O_RDONLY|os.O_RDWR|os.O_TRUNC) != 0 {
+	if !verifyOpenPermission(ctx, flags, uint32(0o200)) {
 		return nil, 0, syscall.EPERM
 	}
 	rflags := file.BaseFlag()

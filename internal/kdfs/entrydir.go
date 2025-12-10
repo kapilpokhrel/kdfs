@@ -73,6 +73,11 @@ var (
 )
 
 func (dir *kdfsEntryDir) Create(ctx context.Context, name string, flags uint32, mode uint32, out *fuse.EntryOut) (*fs.Inode, fs.FileHandle, uint32, syscall.Errno) {
+	perm := getPermission(ctx, dir.DefaultMode())
+	if !hasWriteAccess(perm) {
+		return nil, nil, 0, syscall.EPERM
+	}
+
 	logger := slog.Default().With("EntryDir", dir.path)
 
 	var err error
@@ -124,6 +129,11 @@ func (dir *kdfsEntryDir) Getattr(ctx context.Context, f fs.FileHandle, out *fuse
 }
 
 func (dir *kdfsEntryDir) Unlink(ctx context.Context, name string) syscall.Errno {
+	perm := getPermission(ctx, dir.DefaultMode())
+	if !hasWriteAccess(perm) {
+		return syscall.EPERM
+	}
+
 	logger := slog.Default().With("EntryDir", dir.path)
 
 	logger.Debug("Unlink", "name", name)

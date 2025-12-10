@@ -5,8 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"syscall"
 
 	"github.com/hanwen/go-fuse/v2/fs"
+	"github.com/hanwen/go-fuse/v2/fuse"
 	"github.com/tobischo/gokeepasslib/v3"
 )
 
@@ -45,14 +48,28 @@ func addGroup(ctx context.Context, parent *fs.Inode, g gokeepasslib.Group, serve
 	}
 }
 
-var _ = (fs.NodeOnAdder)((*kdfsRoot)(nil))
+var (
+	_ = (fs.NodeOnAdder)((*kdfsRoot)(nil))
+	_ = (fs.NodeGetattrer)((*kdfsRoot)(nil))
+)
 
-func (kdfs *kdfsRoot) OnAdd(ctx context.Context) {
-	r := &kdfs.Inode
+func (root *kdfsRoot) Getattr(ctx context.Context, f fs.FileHandle, out *fuse.AttrOut) syscall.Errno {
+	logger := slog.Default().With("Root", "/")
 
-	for i := range kdfs.root.Groups {
-		addGroup(ctx, r, kdfs.root.Groups[i], kdfs.kdfsServer)
+	out.AttrValid = fuse.FATTR_ATIME | fuse.FATTR_MTIME | fuse.FATTR_CTIME | fuse.FATTR_UID | fuse.FATTR_GID
+	out.Mode = root.DefaultMode()
+	out.Uid = uint32(os.Getuid())
+	out.Gid = uint32(os.Getgid())
+	logger.Debug("GetAttr", slog.Group("OutAttr", "Mode", out.Mode))
+	return 0
+}
+
+func (root *kdfsRoot) OnAdd(ctx context.Context) {
+	r := &root.Inode
+
+	for i := range root.root.Groups {
+		addGroup(ctx, r, root.root.Groups[i], root.kdfsServer)
 	}
-	NewLockStateFile(ctx, "lockstate", r, kdfs.kdfsServer)
-	NewLockActionFile(ctx, "lockaction", r, kdfs.kdfsServer)
+	NewLockStateFile(ctx, "lockstate", r, root.kdfsServer)
+	NewLockActionFile(ctx, "lockaction", r, root.kdfsServer)
 }
